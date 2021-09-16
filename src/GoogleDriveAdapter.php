@@ -38,14 +38,14 @@ class GoogleDriveAdapter extends AbstractAdapter
      *
      * @var string
      */
-    const FETCHFIELDS_LIST = 'files(id,mimeType,createdTime,modifiedTime,name,parents,permissions,size,webContentLink),nextPageToken';
+    const FETCHFIELDS_LIST = 'files(id,resourceKey,name,mimeType,createdTime,modifiedTime,parents,permissions,size,webContentLink),nextPageToken';
 
     /**
      * Fetch fields setting for get
      *
      * @var string
      */
-    const FETCHFIELDS_GET = 'id,name,mimeType,createdTime,modifiedTime,parents,permissions,size,webContentLink,webViewLink';
+    const FETCHFIELDS_GET = 'id,resourceKey,name,mimeType,createdTime,modifiedTime,parents,permissions,size,webContentLink,webViewLink';
 
     /**
      * MIME tyoe of directory
@@ -292,7 +292,7 @@ class GoogleDriveAdapter extends AbstractAdapter
         $client = $this->service->getClient();
         if ($client->isAccessTokenExpired()) {
             if ($client->isUsingApplicationDefaultCredentials()) {
-                $client->refreshTokenWithAssertion();
+                $client->fetchAccessTokenWithAssertion();
             } else {
                 $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
             }
@@ -738,6 +738,10 @@ class GoogleDriveAdapter extends AbstractAdapter
                 fwrite($stream, "GET {$url['path']}{$query} HTTP/1.1\r\n");
                 fwrite($stream, "Host: {$url['host']}\r\n");
                 fwrite($stream, "Authorization: Bearer {$access_token}\r\n");
+                if ($file->getResourceKey()) {
+                    $keys = $file->getId().'/'.$file->getResourceKey().' '.$file->getParents()[0].'/'.$this->cacheFileObjects[$file->getParents()[0]]->getResourceKey();
+                    fwrite($stream, "X-Goog-Drive-Resource-Keys: {$keys}\r\n");
+                }
                 fwrite($stream, "Connection: Close\r\n");
                 if ($cookies) {
                     fwrite($stream, 'Cookie: '.implode('; ', $cookies)."\r\n");
@@ -1100,7 +1104,7 @@ class GoogleDriveAdapter extends AbstractAdapter
     {
         $id = $object->getId();
         $path_parts = $this->splitFileExtension($object->getName());
-        $result = ['id' => $id, 'visibility' => AdapterInterface::VISIBILITY_PRIVATE];
+        $result = ['id' => $id, 'resource_key' => $object->getResourceKey(), 'visibility' => AdapterInterface::VISIBILITY_PRIVATE];
         $result['type'] = $object->mimeType === self::DIRMIME ? 'dir' : 'file';
         $permissions = $object->getPermissions();
         try {
@@ -1111,6 +1115,7 @@ class GoogleDriveAdapter extends AbstractAdapter
                 }
             }
         } catch (Exception $e) {
+            // unnecesary
         }
         if ($this->useDisplayPaths) {
             $result['virtual_path'] = ($dirname ? ($dirname.'/') : '').$id;
